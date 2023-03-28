@@ -1,0 +1,182 @@
+#include <DHT.h>
+#include <Adafruit_Sensor.h>
+
+// Globaalsed muutujad ja viikude ühendamised
+int pump_lyliti = 0;        // 0 - väljas, 1 - sees
+int led_seadistus = 0;      // 0 - automaatne-, 1 - käsijuhtimine
+int led_heledus_nupp = 0;   // 0 - 100 LED heleduse nupu väärtus Blynk serveris
+int led_heledus = 0;        // 0 - 255 tegelik LED heleduse väärtus Uno viigul
+int led_lyliti = 0;         // 0 - väljas, 1 - sees
+int pumba_joud = 60;        // Voolupinge pumba jaoks hetkel toiteplokk 255 = 12V, 60 = 2.8V, 0 = OV
+
+int loe_A0;                 // LDR  anduri väärtuse lugemine viigult
+int loe_A1;                 // Veepaagi anduri väärtuse lugemine viigult 
+int loe_A2;                 // Mullaniiskuse anduri väärtuse lugemine viigult 
+
+int veepaagi_vaartus;       // Veeanduri väärtus
+int mulla_vaartus;          // Mullaanduri väärtus
+int valgus_vaartus;         // LDR väärtus
+
+int vesi_Pin = 11;          // Veepaagi andurile voolu andmise viik
+int muld_Pin = 5;           // Mulla andurile voolu andmine viik
+int pump_Pin = 9;           // Pumba ühendamise viik 
+int led_Pin = 10;           // LED tulede ühendamise viik
+
+// DHT22 anduri ühendamise sätte
+const int dhtPin = 4;     // DHT22 ühendamise viik
+DHT dht(dhtPin, DHT22);   // DHT22 ühendusport ja sensoritüüp
+float niiskus;            // Õhuniiskus
+float temp;               // Temperatuur
+
+// Andmete piirnormid enne konvertimist, mis omakorda aitab sensoreid kalibreerida
+const int kuiv = 520;    // Kuiva oleku piirnorm mullaandurile
+const int marg = 275;    // Märja oleku piirnorm mullaandurile
+const int tyhi = 430;    // Tühja oleku piirnorm veeandurile
+const int tais = 280;    // Täis oleku piirnorm veeandurile
+const int valge = 890;   // Valguse heleduse oleku piirnorm 
+const int pime = 10;     // Valguse pimeda oleku piirnorm 
+
+
+void setup() 
+{    
+  // Viikude seadistused, määratakse kas tegemist sisendi või väljudiga
+  pinMode(led_Pin,OUTPUT);  // LED lamp
+  pinMode(vesi_Pin,OUTPUT); // Veeanduri toide
+  pinMode(muld_Pin,OUTPUT); // Mullaanduri toide
+  pinMode(pump_Pin,OUTPUT); // Pump
+  pinMode(A0,INPUT); // LDR väärtuste lugemine
+  pinMode(A1,INPUT); // Veeanduri väärtuste lugemine
+  pinMode(A2,INPUT); // Mullaanduri väärtuste lugemine
+  
+  dht.begin();                           // Käivitab DHT22 anduri
+  Serial.begin(9600);                    // Käivitab jadapordi
+}
+
+
+void sendSensor()
+{ // DHT22 andurilt temp ja niiskuse andmete lugemine 
+  niiskus = dht.readHumidity();
+  temp = dht.readTemperature();
+  delay(500);
+} 
+
+
+void loop() 
+{
+
+  sendSensor();
+   
+  
+  // Veeandurilt andmete lugemine
+  digitalWrite(vesi_Pin, HIGH);  // Lülitab toite sisse
+  delay(200);                    // Viivitab lülituse tegemiseks
+  loe_A1 = analogRead(A1);       // Loeb näidu
+  digitalWrite(vesi_Pin, LOW);   // Lülitab toite välja
+  delay(10);   
+ 
+  // Mullaandurilt andmete lugemine
+  digitalWrite(muld_Pin, HIGH);  // Lülitab toite sisse
+  delay(100);                    // Viivitab lülituse tegemiseks
+  loe_A2 = analogRead(A2);       // Loeb näidu
+  digitalWrite(muld_Pin, LOW);   // Lülitab toite välja
+  delay(100); 
+
+  // Valgusandurilt (LDR) andmete lugemine 
+  loe_A0 = analogRead(A0);       //Loeb näidu
+  delay(100);
+
+  // Saadud andurite väärtuste konverteerimine/kalibreerimine 
+  veepaagi_vaartus=map(loe_A1, tais, tyhi, 100, 0);
+  mulla_vaartus=map(loe_A2, marg, kuiv, 100, 0);
+  valgus_vaartus=map(loe_A0, valge, pime, 100, 0);  
+  led_heledus = valgus_vaartus; //!!!! Hiljem Blynkiga muutub ja kaob vajadus
+
+  if (mulla_vaartus > 100)
+   {
+      mulla_vaartus = 100;
+    }   
+    else if (mulla_vaartus < 0)
+      {
+      mulla_vaartus = 0;
+      }
+      
+   if (veepaagi_vaartus > 100)
+   {
+      veepaagi_vaartus = 100;
+    }   
+    else if (veepaagi_vaartus < 0)
+      {
+      veepaagi_vaartus = 0;
+      }
+  
+
+  //Kontrollandmete näitamine jadapordi monitoris PS! Hiljem kustutada või välja kommenteerida
+  //Andmed jadapori monitoris kontrolliks kuvamiseks NB! Hiljem võib eemaldada
+  Serial.print(temp);
+  Serial.print("C / ");   
+  Serial.print(niiskus);
+  Serial.print("% / paak = "); 
+  Serial.print(loe_A1);
+  Serial.print(" / muld = ");   
+  Serial.print(loe_A2); 
+  Serial.print(" / paak V = ");  
+  Serial.print(veepaagi_vaartus);
+  Serial.print(" / muld V = ");   
+  Serial.print(mulla_vaartus); 
+  Serial.print(" / LDR = ");
+  Serial.print(loe_A0);
+  Serial.print(" Heledus = ");
+  Serial.print(led_heledus);/**/
+  Serial.println(" \n"); 
+
+  // Kui muld on kuiv ja vett jagub või kui vett jagub ja pumba lüliti sees, siis 
+  if ((mulla_vaartus <= 45) && (veepaagi_vaartus >= 5)) 
+   {
+    analogWrite(pump_Pin,pumba_joud); // Lülita pump sisse, võimsusega V
+    delay(10);
+    }
+    // Kui muld märg või vesi otsas või pumba lüliti väljas, siis      
+    else if ((mulla_vaartus > 45) or (veepaagi_vaartus < 5))
+      {
+      analogWrite(pump_Pin,0);   // Lülita pump välja
+      delay(10);
+      }
+
+  //Valgustuse automaatne juhtimine vastavalt heledusele 
+  // Kui päevavalgust väga vähe ja led seadistus auto sättes ja led lüliti sees, siis 
+  if (valgus_vaartus<=40)
+   {
+    analogWrite(led_Pin,255); // Lülita LED 100% võimsusega sisse
+    delay(20);
+   }  
+      // Või kui päevavalgust vähe ja led seadistus auto sättes ja led lüliti sees, siis 
+      else if (valgus_vaartus<=65)
+      {
+      analogWrite(led_Pin,192); // Lülita LED 75% võimsusega sisse 
+      delay(20);
+      }
+        // Või kui päevavalgust mõõdukalt ja led seadistus auto sättes ja led lüliti sees, siis 
+        else if (valgus_vaartus<=80)
+        {
+        analogWrite(led_Pin,126); // Lülitab LEDi 50% võimsuselt sisse  
+        delay(20);
+        } 
+          // Või kui päevavalgust palju ja led seadistus auto sättes ja led lüliti sees, siis 
+          else if(valgus_vaartus > 80)
+          {
+          analogWrite(led_Pin,0); // Lülita LED välja
+          delay(10);
+          }
+
+
+  // Kui veepaak on tühi, siis...    
+   if (veepaagi_vaartus<=5)
+   {
+    analogWrite(led_Pin,255);   // Lülita LED sisse
+    delay(200);
+    analogWrite(led_Pin,0);     // Lülita LED välja
+    analogWrite(pump_Pin,0);    // Lülita pump välja
+    delay(100);
+   }
+}
+   
