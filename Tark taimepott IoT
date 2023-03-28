@@ -153,10 +153,8 @@ void sendSensor(){
   Blynk.virtualWrite(V6, mulla_vaartus);
   delay(15);
   }
-
-
-
-
+ 
+ 
 void loop() {
 Blynk.run(); //Käivitab Blynk teenuse
 timer.run();//timeri käivitamine  
@@ -185,7 +183,6 @@ timer.run();//timeri käivitamine
   mulla_vaartus =map(loe_A2, marg, kuiv, 100, 0);
   valgus_vaartus =map(loe_A0, valge, pime, 100, 0);  
   
-
 
 //järelkontroll kui arvud lähevad 0 ja 100 piiridest välja
   if (mulla_vaartus > 100)
